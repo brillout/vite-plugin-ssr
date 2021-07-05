@@ -1,0 +1,44 @@
+{
+  "name": "@vite-plugin-ssr/vue-router",
+  "version": "0.1.0",
+  "description": "Vue Router integration in vite-plugin-ssr projects.",
+  "main": "dist/server/index.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "exports": {
+    "./client/plugin": {
+      "require": "./dist/client/plugin.js",
+      "import": "./src/client/plugin.ts"
+    },
+    "./server/plugin": {
+      "require": "./dist/server/plugin.js",
+      "import": "./dist/server/plugin.js"
+    },
+    "./client": {
+      "require": "./dist/client/index.js",
+      "import": "./src/client/index.ts"
+    },
+    "./server": {
+      "require": "./dist/server/index.js",
+      "import": "./dist/server/index.js"
+    }
+  },
+  "keywords": [
+    "vite",
+    "vite-plugin-ssr",
+    "vue",
+    "vue-router"
+  ],
+  "author": "Gryphon Myers",
+  "license": "MIT",
+  "dependencies": {
+    "vite-plugin-ssr": "^0.1.0-beta.33"
+  },
+  "devDependencies": {
+    "@types/node": "^14.14.37",
+    "typescript": "^4.2.3",
+    "vue-router": "^4.0.6"
+  }
+}

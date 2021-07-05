@@ -40,6 +40,10 @@
     },
     "./plugin": {
       "node": "./dist/cjs/plugin/index.js"
+    },
+    "./route.shared": {
+      "browser": "./route.shared.ts",
+      "node": "./dist/route.shared.js"
     }
   },
   "bin": {

@@ -1,6 +1,9 @@
 {
+  "name": "@vite-plugin-ssr/vue-router-example",
   "scripts": {
-    "start": "node ./server"
+    "start": "node ./server",
+    "build": "cross-env NODE_ENV=production vite build && vite build --ssr",
+    "prerender": "cross-env NODE_ENV=production vite-plugin-ssr prerender"
   },
   "dependencies": {
     "@vitejs/plugin-vue": "^1.2.3",
@@ -10,6 +13,10 @@
     "vite": "^2.3.6",
     "vite-plugin-ssr": "0.1.2",
     "vue": "^3.0.11",
-    "vue-router": "^4.0.5"
+    "vue-router": "^4.0.5",
+    "@vite-plugin-ssr/vue-router": "^0.1.0"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3"
   }
 }

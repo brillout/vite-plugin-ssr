@@ -3,7 +3,9 @@
   "workspaces": [
     "src/",
     "scripts/",
-    "tests/"
+    "tests/",
+    "packages/vue-router/",
+    "examples/vue-router/"
   ],
   "scripts": {
     "========= Demo": "",

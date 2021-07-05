@@ -4,12 +4,12 @@ import pathToRegexp from '@brillout/path-to-regexp'
 import {
   assert,
   assertUsage,
-  higherFirst,
   slice,
   hasProp,
   getUrlPathname,
   isPlainObject,
   castProp,
+  isCallable,
   isPromise
 } from './utils'
 
@@ -20,8 +20,40 @@ export { isErrorPage }
 export { loadPageRoutes }
 export { getFilesystemRoute }
 export { isStaticRoute }
+export { getRouteStrings }
+export { PageId }
+export { PageRoute }
+export { RouteMatch }
+export { RouteFunctionMatch }
+export { RouteFunction }
+export { RouteFunctionResult }
+export { RoutingHandler }
+export { getCustomRouter }
+export { setCustomRouter }
 
 type PageId = string
+
+type RouteFunctionMatch = {
+  matchValue: boolean | number
+  routeParams: Record<string, string>
+}
+
+type RouteFunction = PageRoute<Function>;
+
+type RouteFunctionResult = PageRoute<(RouteFunctionMatch|string)>;
+
+type RouteMatch = { 
+  routeParams: Record<string, string>, 
+  pageId: PageId 
+}
+
+type RoutingHandler = {
+  matchRoutes: (
+    routes: PageRoute[],
+    url: string
+  ) => Promise<null | undefined | RouteMatch>,
+  sortRoutes?: (a: PageRoute, b: PageRoute) => number
+}
 
 async function route(
   url: string,
@@ -35,63 +67,51 @@ async function route(
     allPageIds.length > 0,
     'No `*.page.js` file found. You must create a `*.page.js` file, e.g. `pages/index.page.js` (or `pages/index.page.{jsx, tsx, vue, ...}`).'
   )
-  const pageRoutes = await loadPageRouteFiles()
+  const pageRouteFiles = await loadPageRouteFiles()
 
   const urlPathname = getUrlPathname(url)
   assert(urlPathname.startsWith('/'))
 
-  const routeResults = await Promise.all(
-    allPageIds
-      .filter((pageId) => !isErrorPage(pageId))
-      .map(async (pageId) => {
-        assertUsage(
-          !isReservedPageId(pageId),
-          "Only `_default.page.*` and `_error.page.*` files are allowed to include the special character `_` in their path. The following shouldn't include `_`: " +
-            pageId
-        )
+  allPageIds
+    .filter((pageId) => !isErrorPage(pageId))
+    .forEach(pageId => {
+      assertUsage(
+        !isReservedPageId(pageId),
+        "Only `_default.page.*` and `_error.page.*` files are allowed to include the special character `_` in their path. The following shouldn't include `_`: " +
+          pageId
+      )
+    })
 
-        // Route with filesystem
-        if (!(pageId in pageRoutes)) {
-          const { matchValue, routeParams } = routeWith_filesystem(urlPathname, pageId, allPageIds)
-          return { pageId, matchValue, routeParams }
-        }
-        const { pageRouteFileExports, pageRouteFile } = pageRoutes[pageId]
-
-        // Route with `.page.route.js` defined route string
-        if (hasProp(pageRouteFileExports, 'default', 'string')) {
-          const { matchValue, routeParams } = resolveRouteString(pageRouteFileExports, urlPathname)
-          return { pageId, matchValue, routeParams }
-        }
-
-        // Route with `.page.route.js` defined route function
-        if (hasProp(pageRouteFileExports, 'default', 'function')) {
-          const { matchValue, routeParams } = await resolveRouteFunction(
-            pageRouteFileExports,
-            urlPathname,
-            pageContext,
-            pageRouteFile
-          )
-          return { pageId, matchValue, routeParams }
-        }
-
-        assert(false)
-      })
+  const pageRoutes = Object.fromEntries(
+    Object.entries(pageRouteFiles).map(([pageId, { pageRouteFileExports, pageRouteFile }]) => {
+      return [pageId, { pageRouteFile, pageRoute: pageRouteFileExports.default, pageId }]
+    })
   )
 
-  const winner = pickWinner(routeResults)
-  // console.log('[Route Match]:', `[${urlPathname}]: ${winner && winner.pageId}`)
-
-  if (!winner) return null
-
-  const { pageId, routeParams } = winner
+  const routeFunctionResults = await evaluateRouteFunctionsForUrl(Object.values(pageRouteFiles), url, pageContext);
+  const routeStrings = getRouteStrings(Object.values(pageRoutes), allPageIds);
+    
+  const routes = [
+    ...routeFunctionResults,
+    ...routeStrings
+  ]
+  const { matchRoutes } = getCustomRouter();
+  const result = await matchRoutes(
+    routes,
+    url    
+  )
+  if (!result) {
+    return null;
+  }
+  const { pageId, routeParams } = result;
   assert(isPlainObject(routeParams))
-  return { pageId, pageContextAddendum: { routeParams } }
+  return { pageId, pageContextAddendum: { routeParams } };
 }
 
 async function loadPageRoutes(): Promise<Record<PageId, { pageRoute: string | Function; pageRouteFile: string }>> {
   return Object.fromEntries(
     Object.entries(await loadPageRouteFiles()).map(([pageId, { pageRouteFileExports, pageRouteFile }]) => {
-      return [pageId, { pageRouteFile, pageRoute: pageRouteFileExports.default }]
+      return [pageId, { pageRouteFile, pageRoute: pageRouteFileExports.default, pageId }]
     })
   )
 }
@@ -108,21 +128,7 @@ function getErrorPageId(allPageIds: string[]): string | null {
   return null
 }
 
-function pickWinner<T extends { matchValue: boolean | number }>(routeResults: T[]): T {
-  const candidates = routeResults
-    .filter(({ matchValue }) => matchValue !== false)
-    .sort(
-      higherFirst(({ matchValue }) => {
-        assert(matchValue !== false)
-        return matchValue === true ? 0 : matchValue
-      })
-    )
-
-  const winner = candidates[0]
-
-  return winner
-}
-
+/* Note: this is specific to the pathToRegexp implementation and should be moved. Leaving it in place for now. */
 function routeWith_pathToRegexp(
   urlPathname: string,
   routeString: string
@@ -138,22 +144,12 @@ function routeWith_pathToRegexp(
   return { matchValue, routeParams }
 }
 
+/* Note: this is specific to the pathToRegexp implementation and should be renamed / moved. Leaving it in place for now. */
 function isStaticRoute(route: string): boolean {
   const { matchValue, routeParams } = routeWith_pathToRegexp(route, route)
   return matchValue !== false && Object.keys(routeParams).length === 0
 }
 
-function routeWith_filesystem(
-  urlPathname: string,
-  pageId: string,
-  allPageIds: PageId[]
-): { matchValue: boolean; routeParams: Record<string, string> } {
-  const pageRoute = getFilesystemRoute(pageId, allPageIds)
-  urlPathname = normalizeUrl(urlPathname)
-  // console.log('[Route Candidate] url:' + urlPathname, 'pageRoute:' + pageRoute)
-  const matchValue = urlPathname === pageRoute
-  return { matchValue, routeParams: {} }
-}
 function normalizeUrl(urlPathname: string): string {
   return '/' + urlPathname.split('/').filter(Boolean).join('/').toLowerCase()
 }
@@ -223,19 +219,12 @@ function isDefaultPageFile(filePath: string): boolean {
   return true
 }
 
-function resolveRouteString(pageRouteFileExports: { default: string }, urlPathname: string) {
-  const routeString: string = pageRouteFileExports.default
-  return routeWith_pathToRegexp(urlPathname, routeString)
-}
 async function resolveRouteFunction(
   pageRouteFileExports: { default: Function; iKnowThePerformanceRisksOfAsyncRouteFunctions?: boolean },
   urlPathname: string,
   pageContext: Record<string, unknown>,
   routeFilePath: string
-): Promise<{
-  matchValue: boolean | number
-  routeParams: Record<string, string>
-}> {
+): Promise<RouteFunctionMatch|string> {
   const routeFunction: Function = pageRouteFileExports.default
   let result = routeFunction({ url: urlPathname, pageContext })
   assertUsage(
@@ -243,6 +232,10 @@ async function resolveRouteFunction(
     `The Route Function ${routeFilePath} returned a promise. Async Route Functions may significantly slow down your app: every time a page is rendered the Route Functions of *all* your pages are called and awaited for. A slow Route Function will slow down all your pages. If you still want to define an async Route Function then \`export const iKnowThePerformanceRisksOfAsyncRouteFunctions = true\` in \`${routeFilePath}\`.`
   )
   result = await result
+  if (typeof result === 'string') {
+    // A string will get processed by the underlying matcher
+    return result;
+  }
   if ([true, false].includes(result)) {
     result = { match: result }
   }
@@ -253,7 +246,8 @@ async function resolveRouteFunction(
     }\`.`
   )
   if (!hasProp(result, 'match')) {
-    result.match = true
+    //@TODO figure out why typing is weird here
+    (result as {match:boolean}).match = true
   }
   assert(hasProp(result, 'match'))
   assertUsage(
@@ -290,14 +284,20 @@ type PageRouteExports = {
   default: string | Function
   iKnowThePerformanceRisksOfAsyncRouteFunctions?: boolean
 } & Record<string, unknown>
-type PageRoute = {
+type PageRoute<T=string | Function | RouteFunctionMatch> = {
+  pageRouteFile?: string
+  pageRoute: T
+  pageId: PageId
+}
+type PageRouteFile = {
   pageRouteFile: string
   pageRouteFileExports: PageRouteExports
+  pageId: PageId
 }
-async function loadPageRouteFiles(): Promise<Record<PageId, PageRoute>> {
+async function loadPageRouteFiles(): Promise<Record<PageId, PageRouteFile>> {
   const userRouteFiles = await getPageFiles('.page.route')
 
-  const pageRoutes: Record<PageId, PageRoute> = {}
+  const pageRoutes: Record<PageId, PageRouteFile> = {}
 
   await Promise.all(
     userRouteFiles.map(async ({ filePath, loadFile }) => {
@@ -316,7 +316,7 @@ async function loadPageRouteFiles(): Promise<Record<PageId, PageRoute>> {
       const pageId = computePageId(filePath)
       const pageRouteFile = filePath
 
-      pageRoutes[pageId] = { pageRouteFileExports, pageRouteFile }
+      pageRoutes[pageId] = { pageRouteFileExports, pageRouteFile, pageId }
     })
   )
 
@@ -330,4 +330,114 @@ function isReservedPageId(pageId: string): boolean {
 function isErrorPage(pageId: string): boolean {
   assert(!pageId.includes('\\'))
   return pageId.includes('/_error')
+}
+
+async function evaluateRouteFunctionsForUrl(routes: PageRouteFile[], url: string, pageContext: Record<string, unknown>): Promise<RouteFunctionResult[]> {
+  const { sortRoutes } = getCustomRouter();
+
+  const routeFunctionResults : RouteFunctionResult[] = await Promise.all(routes
+    .filter(route => typeof route.pageRouteFileExports.default !== 'string')
+    .map(async route => {
+      assert(route.pageRouteFile);
+      const routeFunctionResult : (string|RouteFunctionMatch) = await resolveRouteFunction({
+        default: route.pageRouteFileExports.default as Function,
+        iKnowThePerformanceRisksOfAsyncRouteFunctions: route.pageRouteFileExports.iKnowThePerformanceRisksOfAsyncRouteFunctions
+      }, url, pageContext, route.pageRouteFile);
+      
+      return { ...route, pageRoute: routeFunctionResult };
+    }));
+
+  return routeFunctionResults
+    .sort(sortRoutes)
+}
+
+function getRouteStrings(routes: PageRoute[], pageIds: PageId[]) {
+  const { sortRoutes } = getCustomRouter();
+
+  const fsRouteStrings : PageRoute[] = pageIds
+    .filter(pageId => !routes.some(route => route.pageId === pageId) && !isErrorPage(pageId))
+    .map(pageId => ({ pageRoute: getFilesystemRoute(pageId, pageIds), pageId }));
+
+  const routeStrings = Object.values(routes)
+    .filter(route => !isCallable(route.pageRoute));
+
+  return [
+    ...fsRouteStrings,
+    ...routeStrings
+  ].sort(sortRoutes)
+}
+
+const getMatchVal = (route: PageRoute): number => 
+  typeof route.pageRoute === 'string' 
+  ? route.pageRoute.length
+  : route.pageRoute.constructor === Object && !isCallable(route.pageRoute)
+    ? typeof route.pageRoute.matchValue === 'number'
+      ? route.pageRoute.matchValue
+      : route.pageRoute.matchValue
+        ? 1
+        : 0
+    : 0;
+
+function defaultSortRoutes(a: PageRoute, b: PageRoute): number {
+  return getMatchVal(b) - getMatchVal(a);
+}
+
+/* pathToRegexp route handling. These should be moved out (possibly to a separate package). */
+
+async function matchPathToRegexpRoutes(
+  routes: PageRoute[],
+  url: string
+): Promise<null | undefined | RouteMatch> {
+
+  for (var ii = 0; ii < routes.length; ++ii) {
+    const route = routes[ii];
+    const { pageRoute, pageId } = route;
+
+    // Route with `.page.route.js` defined route string
+    if (typeof pageRoute === 'string') {
+      const { matchValue, routeParams } = routeWith_pathToRegexp(url, pageRoute)
+      return { pageId, routeParams }
+    }
+
+    // Route with `.page.route.js` defined route function
+    if (pageRoute.constructor === Object) {
+      const { matchValue, routeParams } = pageRoute as RouteFunctionMatch;
+      return { pageId, routeParams }
+    }
+  }
+  return null;
+}
+
+declare global {
+  namespace NodeJS {
+    interface Global {
+      __vite_ssr_plugin_custom_router: RoutingHandler
+    }
+  }
+}
+
+declare global {
+  interface Window {
+    __vite_ssr_plugin_custom_router: RoutingHandler
+  }
+}
+
+function getCustomRouter() {
+  if( typeof window !== "undefined") {
+    // Browser
+    return window.__vite_ssr_plugin_custom_router
+  } else {
+    // Node.js; `global.customRouter` has been set somewhere during the `createPageRender()` call.
+    return global.__vite_ssr_plugin_custom_router
+  }
+}
+// @TODO eventually the pathToRegexp implementation should be removed from this file entirely so as not to bloat the bundle when it is unused
+function setCustomRouter(customRouter:RoutingHandler = { matchRoutes: matchPathToRegexpRoutes, sortRoutes: defaultSortRoutes }) {
+  if( typeof window !== "undefined") {
+    // Browser
+    return window.__vite_ssr_plugin_custom_router = customRouter
+  } else {
+    // Node.js; `global.customRouter` has been set somewhere during the `createPageRender()` call.
+    return global.__vite_ssr_plugin_custom_router = customRouter
+  }
 }

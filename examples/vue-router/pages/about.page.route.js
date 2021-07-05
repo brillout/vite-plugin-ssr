@@ -1,0 +1,1 @@
+export default '/about' // This will be parsed as a Vue Router path
