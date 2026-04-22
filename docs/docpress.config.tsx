@@ -31,15 +31,16 @@ export default {
 function GlobalNoteRename() {
   return (
     <>
-      <div style={{ display: 'flex', justifyContent: 'center', textAlign: 'center' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', maxWidth: 585, margin: 'auto' }}>
         <Warning>
           The <code>vite-plugin-ssr</code> project has been renamed <a href="https://vike.dev">Vike</a>.
-          <ul style={{ textAlign: 'left', width: 400, marginLeft: 15 }}>
+          <ul>
             <li>
-              If you are already using vite-plugin-ssr then <Link href="/vike">migrate to Vike</Link>.
+              If you are already using vite-plugin-ssr, then <Link href="/vike">migrate to Vike</Link>.
             </li>
             <li>For new projects, don't use vite-plugin-ssr but use Vike instead.</li>
           </ul>
+          It follows the same philosophy: Vike itself (<a href="https://vike.dev/extension-vs-custom">without extensions</a>) is unopinionated and lets you integrate tools with architectural freedom.
         </Warning>
       </div>
     </>
