@@ -36,11 +36,11 @@ function GlobalNoteRename() {
           The <code>vite-plugin-ssr</code> project has been renamed <a href="https://vike.dev">Vike</a>.
           <ul>
             <li>
-              If you are already using vite-plugin-ssr, then <Link href="/vike">migrate to Vike</Link>.
+              If you are using <code>vite-plugin-ssr</code>, <Link href="/vike">migrate to Vike</Link>.
             </li>
-            <li>For new projects, don't use vite-plugin-ssr but use Vike instead.</li>
+            <li>For new projects, use Vike instead of <code>vite-plugin-ssr</code>.</li>
           </ul>
-          It follows the same philosophy: Vike itself (<a href="https://vike.dev/extension-vs-custom">without extensions</a>) is unopinionated and lets you integrate tools with architectural freedom.
+          Vike itself (<a href="https://vike.dev/extension-vs-custom">without extensions</a>) is like <code>vite-plugin-ssr</code>: unopinionated and fully agnostic.
         </Warning>
       </div>
     </>

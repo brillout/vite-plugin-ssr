@@ -181,7 +181,7 @@ function Features() {
           desc: (
             <>
               <p>
-                <b>DX that scales</b> to hundreds of kLOCs with HMR & development startup that stays fast. Powered by
+                <b>DX that scales</b> to hundreds of kLOCs with HMR & dev start that stays fast — powered by
                 Vite <ViteLogo />.
               </p>
               <p>
@@ -330,7 +330,7 @@ function Features() {
         {
           title: (
             <>
-              <Emoji name="lab" /> Cutting Edge
+              <span style={{fontFamily: 'emoji'}}><Emoji name="lab" /></span> Cutting Edge
             </>
           ),
           desc: (
