@@ -5,4 +5,10 @@ packages:
   - 'boilerplates/*'
   - 'examples/*'
   - 'test/*'
+allowBuilds:
+  '@brillout/dev-my-dep': true
+  '@swc/core': true
+  esbuild: true
+  playwright-chromium: true
+  vue-demi: true
 minimumReleaseAge: 0
